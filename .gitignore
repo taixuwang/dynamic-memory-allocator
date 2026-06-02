@@ -1,0 +1,14 @@
+# Avoid adding certain files to repository
+
+# Object files, except demo binaries
+*.o
+
+# emacs backup
+*.c~
+*.h~
+
+# executables
+bench
+
+# formatting files
+cpplint.py
