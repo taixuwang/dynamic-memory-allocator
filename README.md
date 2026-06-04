@@ -1,0 +1,1 @@
+This is a dynamic memory allocator in C that pre-allocates large memory chunks, serving subsequent allocations entirely in user-space to reduce expensive system calls and kernel context switches.
