@@ -13,9 +13,9 @@
 #include <pthread.h>
 #include "mem.h"
 
-#define NUM_THREADS    8
-#define OPS_PER_THREAD 5000
-#define MAX_BLOCKS     200
+#define NUM_THREADS    32
+#define OPS_PER_THREAD 100000
+#define MAX_BLOCKS     500
 #define MAX_SIZE       4096
 
 /* Per-thread state: each thread has its own array of allocated blocks */
