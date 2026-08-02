@@ -8,6 +8,7 @@
 #include <inttypes.h>
 #include <sys/mman.h>
 #include <assert.h>
+#include <pthread.h>
 #include "mem.h"  // outward facing functions
 #include "mem_internal.h"  // private functions
 
@@ -19,7 +20,12 @@
 // Global variables for convenience
 // these are static so outside code can't use them.
 static freeNode* freeBlockList;  // points to list of available memory blocks
-static uintptr_t totalMalloc;  // keeps track of memory allocated with malloc
+static uintptr_t totalMalloc;   // keeps track of memory allocated with mmap
+
+// Mutex protecting all access to freeBlockList and totalMalloc.
+// Internal functions (get_block, new_block, split_node, return_block,
+// adjacent, check_heap) are always called while the lock is held.
+static pthread_mutex_t heap_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /* The following functions need to be defined to meet the interface
    specified in mem.h.  These functions return or take the 'usable'
@@ -33,7 +39,6 @@ static uintptr_t totalMalloc;  // keeps track of memory allocated with malloc
    Pre-condition: size is a positive integer
 */
 void* getmem(uintptr_t size) {
-  check_heap();
   assert(size > 0);
 
   // make sure size is a multiple of MINCHUNK (16):
@@ -41,12 +46,17 @@ void* getmem(uintptr_t size) {
     size = size + MINCHUNK -(size % MINCHUNK);
   }
 
+  pthread_mutex_lock(&heap_lock);
+  check_heap();
+
   uintptr_t block = get_block(size);
   if (block == 0) {
+    pthread_mutex_unlock(&heap_lock);
     return NULL;
   }
 
   check_heap();
+  pthread_mutex_unlock(&heap_lock);
   return((void*)(block+NODESIZE));  // offset to get usable address
 }
 
@@ -55,17 +65,18 @@ void* getmem(uintptr_t size) {
    The pointer 'p' is the address of usable memory, allocated using getmem
 */
 void freemem(void* p) {
-  check_heap();
-
   if (p == NULL) {
     return;
   }
 
   // offset back to get the starting address of the block
   uintptr_t node_address = (uintptr_t)p - NODESIZE;
-  return_block(node_address);
 
+  pthread_mutex_lock(&heap_lock);
   check_heap();
+  return_block(node_address);
+  check_heap();
+  pthread_mutex_unlock(&heap_lock);
 }
 
 
@@ -236,6 +247,7 @@ void check_heap() {
 
 void get_mem_stats(uintptr_t* total_size, uintptr_t* total_free,
                    uintptr_t* n_free_blocks) {
+  pthread_mutex_lock(&heap_lock);
   *total_size = totalMalloc;
   *total_free = 0;
   *n_free_blocks = 0;
@@ -246,9 +258,11 @@ void get_mem_stats(uintptr_t* total_size, uintptr_t* total_free,
     *total_free = *total_free + (currentNode->size + NODESIZE);
     currentNode = currentNode->next;
   }
+  pthread_mutex_unlock(&heap_lock);
 }
 
 void print_heap(FILE *f) {
+  pthread_mutex_lock(&heap_lock);
   printf("Printing the heap\n");
   freeNode* currentNode = freeBlockList;
   while (currentNode !=NULL) {
@@ -258,6 +272,7 @@ void print_heap(FILE *f) {
     fprintf(f, "\n");
     currentNode = currentNode->next;
   }
+  pthread_mutex_unlock(&heap_lock);
 }
 
 /* Returns the usable size of a block allocated by getmem.
