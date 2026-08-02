@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <inttypes.h>
+#include <sys/mman.h>
 #include <assert.h>
 #include "mem.h"  // outward facing functions
 #include "mem_internal.h"  // private functions
@@ -109,8 +110,8 @@ uintptr_t get_block(uintptr_t size) {
   return get_block(size);
 }
 
-freeNode* new_block(int size) {
-  int alloc_size;
+freeNode* new_block(size_t size) {
+  size_t alloc_size;
   // allocates the maximum between size and BIGCHUNK
   if (size > BIGCHUNK) {
     alloc_size = size;
@@ -118,11 +119,16 @@ freeNode* new_block(int size) {
     alloc_size = BIGCHUNK;
   }
 
-  freeNode* new_chunk = (freeNode*)malloc(alloc_size);
-  if (new_chunk == NULL) {
+  // Use mmap instead of malloc to get memory directly from the OS.
+  // This avoids infinite recursion when this allocator is used as a
+  // malloc replacement (via LD_PRELOAD / DYLD_INSERT_LIBRARIES).
+  void* raw = mmap(NULL, alloc_size, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANON, -1, 0);
+  if (raw == MAP_FAILED) {
     return NULL;
   }
 
+  freeNode* new_chunk = (freeNode*)raw;
   totalMalloc += alloc_size;
 
   // gets the usable size
@@ -252,4 +258,17 @@ void print_heap(FILE *f) {
     fprintf(f, "\n");
     currentNode = currentNode->next;
   }
+}
+
+/* Returns the usable size of a block allocated by getmem.
+   The freeNode header is stored immediately before the usable memory,
+   so we can read the size field directly.
+   Pre-condition: p was returned by getmem and has not been freed.
+*/
+uintptr_t getmem_usable_size(void* p) {
+  if (p == NULL) {
+    return 0;
+  }
+  freeNode* node = (freeNode*)((uintptr_t)p - NODESIZE);
+  return node->size;
 }
