@@ -3,7 +3,7 @@
 
 # ---- Toolchain ----
 CC       = gcc
-CFLAGS   = -Wall -std=c11 -I$(INC_DIR)
+CFLAGS   = -Wall -std=c11 -pthread -I$(INC_DIR)
 AR       = ar
 ARFLAGS  = rcs
 
@@ -11,6 +11,7 @@ ARFLAGS  = rcs
 SRC_DIR   = src
 INC_DIR   = include
 BENCH_DIR = bench
+TESTS_DIR = tests
 BUILD_DIR = build
 
 # ---- OS detection ----
@@ -91,10 +92,16 @@ noassert: CFLAGS += -DNDEBUG
 noassert: $(BENCH_BIN)
 
 # ---- Test ----
-test: debug
+TEST_THREAD = $(BUILD_DIR)/test_threadsafe
+
+$(TEST_THREAD): $(TESTS_DIR)/test_threadsafe.c $(BUILD_DIR)/memory.o | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -o $@ $< $(BUILD_DIR)/memory.o
+
+test: debug $(TEST_THREAD)
 	$(BENCH_BIN)
 	$(BENCH_BIN) 5
 	$(BENCH_BIN) 10 100
+	$(TEST_THREAD)
 
 # ---- Install / Uninstall ----
 install: $(LIB_SO) $(LIB_A)
