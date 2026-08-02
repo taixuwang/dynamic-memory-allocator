@@ -42,7 +42,7 @@ uintptr_t get_block(uintptr_t size);
    Pre-condition: an empty or sorted list of memory blocks
    Post-condition: a sorted list of memory blocks
 */
-freeNode* new_block(int size);
+freeNode* new_block(size_t size);
 
 /* splits one node into two, the first of which has size == size
    the second of which is the remaining space in the node.

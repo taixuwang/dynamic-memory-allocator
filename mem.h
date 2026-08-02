@@ -35,5 +35,10 @@ void freemem(void* p);
 void get_mem_stats(uintptr_t* total_size, uintptr_t* total_free,
                    uintptr_t* n_free_blocks);
 
+/* Return the usable size of the memory block pointed to by p.
+   The pointer p must have been obtained from a call to getmem.
+   Returns 0 if p is NULL.
+*/
+uintptr_t getmem_usable_size(void* p);
 
 #endif  // MEM_H_
