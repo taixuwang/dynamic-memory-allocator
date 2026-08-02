@@ -45,7 +45,7 @@ BENCH_OBJS   = $(BUILD_DIR)/bench.o $(BUILD_DIR)/memory.o
 #  Targets
 # ==============================================================
 
-.PHONY: all lib clean test debug noassert install uninstall
+.PHONY: all lib clean test debug noassert benchmark install uninstall
 
 all: $(BENCH_BIN) $(LIB_SO) $(LIB_A)
 
@@ -102,6 +102,17 @@ test: debug $(TEST_THREAD)
 	$(BENCH_BIN) 5
 	$(BENCH_BIN) 10 100
 	$(TEST_THREAD)
+
+# ---- Performance benchmark (vs system malloc) ----
+BENCHMARK_BIN = $(BUILD_DIR)/benchmark
+
+$(BENCHMARK_BIN): $(BENCH_DIR)/benchmark.c $(SRC_DIR)/memory.c $(INC_DIR)/mem.h $(INC_DIR)/mem_internal.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -O2 -DNDEBUG -o $@ $(BENCH_DIR)/benchmark.c $(SRC_DIR)/memory.c
+
+benchmark: $(BENCHMARK_BIN)
+	$(BENCHMARK_BIN) $(BUILD_DIR)/benchmark_results.csv
+	@echo ""
+	@echo "To generate charts: python3 scripts/plot_benchmark.py $(BUILD_DIR)/benchmark_results.csv"
 
 # ---- Install / Uninstall ----
 install: $(LIB_SO) $(LIB_A)
