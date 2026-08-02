@@ -1,14 +1,21 @@
-# Avoid adding certain files to repository
-
-# Object files, except demo binaries
+# Build artifacts
+build/
 *.o
+*.a
+*.so
+*.dylib
 
-# emacs backup
-*.c~
-*.h~
-
-# executables
+# Executables
 bench
+quick_test
 
-# formatting files
-cpplint.py
+# Editor / OS junk
+*~
+.DS_Store
+*.swp
+*.swo
+
+# IDE
+.vscode/
+.idea/
+*.dSYM/

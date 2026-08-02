@@ -1,69 +1,113 @@
-# Makefile for mem memory system
+# Makefile for mymalloc — a drop-in replacement memory allocator
 # Copyright 2026 Taixu Wang
 
-CC = gcc
-CARGS = -Wall -std=c11
+# ---- Toolchain ----
+CC       = gcc
+CFLAGS   = -Wall -std=c11 -I$(INC_DIR)
+AR       = ar
+ARFLAGS  = rcs
 
-# Detect OS for shared library settings
+# ---- Directories ----
+SRC_DIR   = src
+INC_DIR   = include
+BENCH_DIR = bench
+BUILD_DIR = build
+
+# ---- OS detection ----
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
-    SHARED_EXT = dylib
+    SHARED_EXT   = dylib
     SHARED_FLAGS = -dynamiclib
-    PRELOAD_CMD = DYLD_INSERT_LIBRARIES=./libmymalloc.dylib DYLD_FORCE_FLAT_NAMESPACE=1
 else
-    SHARED_EXT = so
-    SHARED_FLAGS = -shared
-    PRELOAD_CMD = LD_PRELOAD=./libmymalloc.so
+    SHARED_EXT   = so
+    SHARED_FLAGS = -shared -Wl,-soname,$(LIB_NAME).$(SHARED_EXT)
 endif
 
-LIB_NAME = libmymalloc
+# ---- Naming ----
+LIB_NAME  = libmymalloc
+LIB_SO    = $(BUILD_DIR)/$(LIB_NAME).$(SHARED_EXT)
+LIB_A     = $(BUILD_DIR)/$(LIB_NAME).a
+BENCH_BIN = $(BUILD_DIR)/bench
 
-# ---- Default target ----
-all: bench $(LIB_NAME).$(SHARED_EXT) $(LIB_NAME).a
+# ---- Install paths ----
+PREFIX      ?= /usr/local
+INSTALL_LIB  = $(PREFIX)/lib
+INSTALL_INC  = $(PREFIX)/include/mymalloc
 
-# ---- Shared library (core deliverable) ----
-$(LIB_NAME).$(SHARED_EXT): memory_pic.o malloc_wrapper_pic.o
-	$(CC) $(CARGS) $(SHARED_FLAGS) -o $@ $^
+# ---- Source / object lists ----
+LIB_SRCS     = $(SRC_DIR)/memory.c $(SRC_DIR)/malloc_wrapper.c
+LIB_OBJS     = $(BUILD_DIR)/memory.o $(BUILD_DIR)/malloc_wrapper.o
+LIB_PIC_OBJS = $(BUILD_DIR)/memory_pic.o $(BUILD_DIR)/malloc_wrapper_pic.o
+BENCH_OBJS   = $(BUILD_DIR)/bench.o $(BUILD_DIR)/memory.o
 
-# PIC object files for shared library
-memory_pic.o: memory.c mem.h mem_internal.h
-	$(CC) $(CARGS) -fPIC -c memory.c -o $@
+# ==============================================================
+#  Targets
+# ==============================================================
 
-malloc_wrapper_pic.o: malloc_wrapper.c mem.h
-	$(CC) $(CARGS) -fPIC -c malloc_wrapper.c -o $@
+.PHONY: all lib clean test debug noassert install uninstall
+
+all: $(BENCH_BIN) $(LIB_SO) $(LIB_A)
+
+lib: $(LIB_SO) $(LIB_A)
+
+# ---- Build directory (order-only prerequisite) ----
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+
+# ---- Shared library ----
+$(LIB_SO): $(LIB_PIC_OBJS)
+	$(CC) $(CFLAGS) $(SHARED_FLAGS) -o $@ $^
 
 # ---- Static library ----
-$(LIB_NAME).a: memory.o malloc_wrapper.o
-	ar rcs $@ $^
+$(LIB_A): $(LIB_OBJS)
+	$(AR) $(ARFLAGS) $@ $^
 
-malloc_wrapper.o: malloc_wrapper.c mem.h
-	$(CC) $(CARGS) -c malloc_wrapper.c
+# ---- Benchmark executable (links getmem/freemem directly) ----
+$(BENCH_BIN): $(BENCH_OBJS)
+	$(CC) $(CFLAGS) -o $@ $^
 
-# ---- Benchmark executable (uses getmem/freemem directly) ----
-bench: bench.o memory.o
-	$(CC) $(CARGS) -o bench $^
+# ---- PIC objects (for shared library) ----
+$(BUILD_DIR)/memory_pic.o: $(SRC_DIR)/memory.c $(INC_DIR)/mem.h $(INC_DIR)/mem_internal.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -fPIC -c $< -o $@
 
-bench.o: bench.c mem.h
-	$(CC) $(CARGS) -c bench.c
+$(BUILD_DIR)/malloc_wrapper_pic.o: $(SRC_DIR)/malloc_wrapper.c $(INC_DIR)/mem.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -fPIC -c $< -o $@
 
-memory.o: memory.c mem.h mem_internal.h
-	$(CC) $(CARGS) -c memory.c
+# ---- Regular objects ----
+$(BUILD_DIR)/memory.o: $(SRC_DIR)/memory.c $(INC_DIR)/mem.h $(INC_DIR)/mem_internal.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
 
-# ---- Debug / noassert builds ----
-debug: CARGS += -g -D DEBUG
-debug: bench
+$(BUILD_DIR)/malloc_wrapper.o: $(SRC_DIR)/malloc_wrapper.c $(INC_DIR)/mem.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
 
-noassert: CARGS += -D NDEBUG
-noassert: bench
+$(BUILD_DIR)/bench.o: $(BENCH_DIR)/bench.c $(INC_DIR)/mem.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
 
-# ---- Test targets ----
+# ---- Debug / release variants ----
+debug: CFLAGS += -g -DDEBUG
+debug: $(BENCH_BIN)
+
+noassert: CFLAGS += -DNDEBUG
+noassert: $(BENCH_BIN)
+
+# ---- Test ----
 test: debug
-	./bench
-	./bench 5
-	./bench 10 100
+	$(BENCH_BIN)
+	$(BENCH_BIN) 5
+	$(BENCH_BIN) 10 100
+
+# ---- Install / Uninstall ----
+install: $(LIB_SO) $(LIB_A)
+	install -d $(INSTALL_LIB) $(INSTALL_INC)
+	install -m 755 $(LIB_SO) $(INSTALL_LIB)/
+	install -m 644 $(LIB_A)  $(INSTALL_LIB)/
+	install -m 644 $(INC_DIR)/mem.h $(INSTALL_INC)/
+
+uninstall:
+	rm -f  $(INSTALL_LIB)/$(LIB_NAME).$(SHARED_EXT)
+	rm -f  $(INSTALL_LIB)/$(LIB_NAME).a
+	rm -rf $(INSTALL_INC)
 
 # ---- Clean ----
 clean:
-	rm -rf bench *.o *.$(SHARED_EXT) *.a *~
-
-.PHONY: all clean test debug noassert
+	rm -rf $(BUILD_DIR)
