@@ -4,10 +4,20 @@ build/
 *.a
 *.so
 *.dylib
+*.dSYM/
 
-# Executables
+# Executables (if placed outside build/)
 bench
 quick_test
+
+# Python virtual environment and cache
+.venv/
+__pycache__/
+*.pyc
+
+# Benchmark outputs
+benchmark_results.csv
+benchmark_*.png
 
 # Editor / OS junk
 *~
@@ -18,4 +28,3 @@ quick_test
 # IDE
 .vscode/
 .idea/
-*.dSYM/
